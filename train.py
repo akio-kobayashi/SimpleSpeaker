@@ -18,11 +18,12 @@ class SpeakerLoss(nn.Module):
         super(SpeakerLoss, self).__init__()
 
         self.weight=weight
-        self.adacos=(num_features, num_class)
-        self.ce=nn.CrossEntropyLoss()
+        self.ada=AdaCos(num_features, num_class).cuda()
+        self.ce1=nn.CrossEntropyLoss().cuda()
+        self.ce2=nn.CrossEntropyLoss().cuda()
         
     def forward(self, y_pred, x_vec, y_true):
-        return self.weight * self.adacos(x_vec, y_true) + (1.-self.weight) * self.ce(y_pred, y_true)
+        return self.weight * self.ce1(self.ada(x_vec, y_true), y_true) + (1.-self.weight) * self.ce2(y_pred, y_true)
         
 class IterMeter(object):
     """keeps track of total iterations"""
@@ -45,7 +46,7 @@ def train(model, loader, optimizer, scheduler,
     preds=None
     corrs=None
     for batch_idx, _data in enumerate(loader):
-        inputs, _, speakers, lengths = _data
+        inputs, speakers, lengths = _data
 
         optimizer.zero_grad()
 
@@ -93,9 +94,9 @@ def evaluate(model, loader):
 
     with torch.no_grad():
         for i, _data in enumerate(loader):
-            inputs, _, speakers, lengths = _data
+            inputs, speakers, lengths = _data
 
-            outputs = model(inputs.cuda(), lengths)
+            outputs, x_vec = model(inputs.cuda(), lengths)
             speakers = speakers.unsqueeze(dim=-1)
 
             outputs=outputs.to('cpu').detach().numpy().copy()
@@ -149,7 +150,9 @@ def main():
 
     train_dataset=SpeechDataset(path=args.data, keypath=args.train, train=True)
     mean, std = train_dataset.get_stats()
-
+    s2i, i2s = train_dataset.get_speakers()
+    num_speakers=len(s2i)
+    
     train_loader =data.DataLoader(dataset=train_dataset,
                                   batch_size=args.batch_size,
                                   shuffle=True,
@@ -157,14 +160,14 @@ def main():
                                   **kwargs)
 
     valid_dataset=SpeechDataset(path=args.data, keypath=args.valid,
-                                stats=[mean, std], train=False)
+                                stats=[mean, std], speakers=[s2i, i2s], train=False)
     valid_loader=data.DataLoader(dataset=valid_dataset,
                                  batch_size=args.batch_size,
                                  shuffle=False,
                                  collate_fn=lambda x: generator.data_processing(x, 'valid'))
 
-    model=X_vector()
-
+    model=X_vector(train_dataset.input_size(), num_speakers)
+    
     print(f'The model has {count_parameters(model):,} trainable parameters')
 
     model.to(device)
@@ -179,7 +182,7 @@ def main():
                                               steps_per_epoch=int(len(train_loader)),
                                               epochs=args.epochs,
                                               anneal_strategy='linear')
-    criterion=SpeakerLoss()
+    criterion=SpeakerLoss(512, num_speakers)
     iter_meter=IterMeter()
 
     max_acc=0.

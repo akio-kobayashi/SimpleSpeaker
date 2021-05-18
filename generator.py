@@ -5,6 +5,21 @@ import h5py
 import torch
 import torch.nn as nn
 
+def compute_spk2id(h5fd):
+    spk2id={}
+    id2spk={}
+    spk2id['<unk>']=0
+    id2spk[0]='<unk>'
+
+    n=1
+    for key in h5fd.keys():
+        spk=h5fd[key+'/speaker'][()].decode('utf-8')
+        if spk not in spk2id:
+            spk2id[spk] = n
+            id2spk[n]=spk
+            n+=1
+    return spk2id, id2spk
+
 def compute_norm(h5fd):
     keys=h5fd.keys()
     rows=0
@@ -44,7 +59,7 @@ class SpeechDataset(torch.utils.data.Dataset):
         else:
             self.mean, self.std = stats
         if speakers is None:
-            self.spk2id, self.id2spk = str2id(self.h5fd)
+            self.spk2id, self.id2spk = compute_spk2id(self.h5fd)
         else:
             self.spk2id, self.id2spk = speakers
             
@@ -94,10 +109,9 @@ class SpeechDataset(torch.utils.data.Dataset):
         input -= self.mean
         input /= self.std
 
-        label=int(self.h5fd[self.keys[idx]+'/label'][()])
-        speaker=self.spk2id[self.h5fd[self.keys[idx]+'/speaker'][()])]
+        speaker=self.spk2id[self.h5fd[self.keys[idx]+'/speaker'][()].decode('utf-8')]
         
-        return input, label, speaker
+        return input, speaker
 
 '''
     data_processing
@@ -105,21 +119,18 @@ class SpeechDataset(torch.utils.data.Dataset):
 '''
 def data_processing(data, data_type="train"):
     inputs = []
-    labels = []
     speakers = []
     input_lengths=[]
 
-    for input, label speaker, in data:
+    for input, speaker, in data:
         """ inputs : (batch, time, feature) """
         # w/o channel
         inputs.append(torch.from_numpy(input.astype(np.float32)).clone())
-        labels.append(label)
         speakers.append(speaker)
         
         input_lengths.append(input.shape[0])
 
     inputs = nn.utils.rnn.pad_sequence(inputs, batch_first=True)
-    labels = torch.from_numpy(np.array(labels)).clone()
     speakers = torch.from_numpy(np.array(speakers)).clone()
     
-    return inputs, labels, speakers, input_lengths
+    return inputs, speakers, input_lengths

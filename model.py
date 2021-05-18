@@ -31,7 +31,7 @@ def stats_with_mask(tensor, mask):
     return mean, std
 
 class X_vector(nn.Module):
-    def __init__(self, input_dim = 60, class_num=2):
+    def __init__(self, input_dim = 40, class_num=2):
         super(X_vector, self).__init__()
 
         self.tdnn1 = TDNN(input_dim=input_dim, output_dim=512, context_size=5, dilation=1,dropout_p=0.5)
