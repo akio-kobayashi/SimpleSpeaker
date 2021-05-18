@@ -35,7 +35,7 @@ class AdaCos(nn.Module):
             self.s = torch.log(B_avg) / torch.cos(torch.min(math.pi/4 * torch.ones_like(theta_med), theta_med))
         output = self.s * logits
 
-        return output
+        return output, logits
 
 
 class ArcFace(nn.Module):

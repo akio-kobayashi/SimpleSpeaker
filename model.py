@@ -42,7 +42,6 @@ class X_vector(nn.Module):
         self.segment5 = nn.Linear(512, 1500)
         self.segment6 = nn.Linear(3000, 512)
         self.segment7 = nn.Linear(512, 512)
-        self.output = nn.Linear(512, class_num)
         
     def forward(self, inputs, lengths=None):
         tdnn1_out = self.tdnn1(inputs)
@@ -60,7 +59,6 @@ class X_vector(nn.Module):
         stat_pooling = torch.cat((mean,std),1) # (b, fx2)
         segment6_out = self.segment6(stat_pooling)
         x_vec = self.segment7(segment6_out)
-        predictions = self.output(x_vec)
 
-        return predictions, x_vec
+        return x_vec
 

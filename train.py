@@ -14,16 +14,22 @@ from sklearn.metrics import accuracy_score
 from adacos import AdaCos 
 
 class SpeakerLoss(nn.Module):
-    def __init__(self, num_features, num_class, weight=0.5):
+    def __init__(self, num_features, num_class):
         super(SpeakerLoss, self).__init__()
 
-        self.weight=weight
         self.ada=AdaCos(num_features, num_class).cuda()
-        self.ce1=nn.CrossEntropyLoss().cuda()
-        self.ce2=nn.CrossEntropyLoss().cuda()
+        self.ce=nn.CrossEntropyLoss().cuda()
         
-    def forward(self, y_pred, x_vec, y_true):
-        return self.weight * self.ce1(self.ada(x_vec, y_true), y_true) + (1.-self.weight) * self.ce2(y_pred, y_true)
+    def forward(self, x_vec, y_true):
+        if y_true is not None:
+            outputs, logits = self.ada(x_vec, y_true)
+            outputs = self.ce(outputs, y_true)
+
+            return outputs, logits
+        else:
+            logits = self.ada(x_vec)
+
+            return logits
         
 class IterMeter(object):
     """keeps track of total iterations"""
@@ -50,8 +56,8 @@ def train(model, loader, optimizer, scheduler,
 
         optimizer.zero_grad()
 
-        outputs, x_vector = model(inputs.cuda(), lengths)
-        loss = criterion(outputs, x_vector, speakers.cuda())
+        x_vector = model(inputs.cuda(), lengths)
+        loss, outputs = criterion(x_vector, speakers.cuda())
         loss.backward()
 
         optimizer.step()
@@ -85,7 +91,7 @@ def train(model, loader, optimizer, scheduler,
     preds = np.argmax(preds, axis=1)
     return epoch_loss, preds, corrs
 
-def evaluate(model, loader):
+def evaluate(model, loader, criterion):
 
     model.eval()
     data_len = len(loader)
@@ -96,7 +102,8 @@ def evaluate(model, loader):
         for i, _data in enumerate(loader):
             inputs, speakers, lengths = _data
 
-            outputs, x_vec = model(inputs.cuda(), lengths)
+            x_vector = model(inputs.cuda(), lengths)
+            outputs = criterion(x_vector)
             speakers = speakers.unsqueeze(dim=-1)
 
             outputs=outputs.to('cpu').detach().numpy().copy()
