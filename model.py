@@ -43,7 +43,7 @@ class X_vector(nn.Module):
         self.segment6 = nn.Linear(3000, 512)
         self.segment7 = nn.Linear(512, 512)
         self.output = nn.Linear(512, class_num)
-
+        
     def forward(self, inputs, lengths=None):
         tdnn1_out = self.tdnn1(inputs)
         tdnn2_out = self.tdnn2(tdnn1_out)

@@ -11,7 +11,19 @@ import generator
 import numpy as np
 import argparse
 from sklearn.metrics import accuracy_score
+from adacos import AdaCos 
 
+class SpeakerLoss(nn.Module):
+    def __init__(self, num_features, num_class, weight=0.5):
+        super(SpeakerLoss, self).__init__()
+
+        self.weight=weight
+        self.adacos=(num_features, num_class)
+        self.ce=nn.CrossEntropyLoss()
+        
+    def forward(self, y_pred, x_vec, y_true):
+        return self.weight * self.adacos(x_vec, y_true) + (1.-self.weight) * self.ce(y_pred, y_true)
+        
 class IterMeter(object):
     """keeps track of total iterations"""
     def __init__(self):
