@@ -32,7 +32,8 @@ def compute_norm(h5fd):
 
 class SpeechDataset(torch.utils.data.Dataset):
 
-    def __init__(self, path, keypath=None, stats=None, train=True):
+    def __init__(self, path, keypath=None, stats=None,
+                 speakers=None, train=True):
         super(SpeechDataset, self).__init__()
 
         self.train=train
@@ -42,6 +43,11 @@ class SpeechDataset(torch.utils.data.Dataset):
             self.mean, self.std = compute_norm(self.h5fd)
         else:
             self.mean, self.std = stats
+        if speakers is None:
+            self.spk2id, self.id2spk = str2id(self.h5fd)
+        else:
+            self.spk2id, self.id2spk = speakers
+            
         self.keys=[]
 
         if keypath is not None:
@@ -52,12 +58,17 @@ class SpeechDataset(torch.utils.data.Dataset):
 
     def write_stats(self, file):
         with h5py.File(file, 'w') as f:
-            f.create_dataset(key+'/mean',  data=self.mean, compression='gzip', compression_opts=9)
-            f.create_dataset(key+'/std',  data=self.std, compression='gzip', compression_opts=9)
+            f.create_dataset(key+'/mean',  data=self.mean,
+                             compression='gzip', compression_opts=9)
+            f.create_dataset(key+'/std',  data=self.std,
+                             compression='gzip', compression_opts=9)
             
     def get_stats(self):
         return self.mean, self.std
 
+    def get_speakers(self):
+        return self.spk2id, self.id2spk
+    
     def get_keys(self):
         return self.keys
 
@@ -84,8 +95,9 @@ class SpeechDataset(torch.utils.data.Dataset):
         input /= self.std
 
         label=int(self.h5fd[self.keys[idx]+'/label'][()])
-
-        return input, label
+        speaker=self.spk2id[self.h5fd[self.keys[idx]+'/speaker'][()])]
+        
+        return input, label, speaker
 
 '''
     data_processing
@@ -94,16 +106,20 @@ class SpeechDataset(torch.utils.data.Dataset):
 def data_processing(data, data_type="train"):
     inputs = []
     labels = []
+    speakers = []
     input_lengths=[]
 
-    for input, label in data:
+    for input, label speaker, in data:
         """ inputs : (batch, time, feature) """
         # w/o channel
         inputs.append(torch.from_numpy(input.astype(np.float32)).clone())
         labels.append(label)
+        speakers.append(speaker)
+        
         input_lengths.append(input.shape[0])
 
     inputs = nn.utils.rnn.pad_sequence(inputs, batch_first=True)
-    labels=torch.from_numpy(np.array(labels)).clone()
+    labels = torch.from_numpy(np.array(labels)).clone()
+    speakers = torch.from_numpy(np.array(speakers)).clone()
     
-    return inputs, labels, input_lengths
+    return inputs, labels, speakers, input_lengths

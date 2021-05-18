@@ -5,7 +5,7 @@ import torch.utils.data as data
 import torch.optim as optim
 import torch.nn.functional as F
 #from torch.utils.tensorboard import SummaryWriter
-from model import ASRModel
+from model import X_vector
 from generator import SpeechDataset
 import generator
 import numpy as np
@@ -33,27 +33,27 @@ def train(model, loader, optimizer, scheduler,
     preds=None
     corrs=None
     for batch_idx, _data in enumerate(loader):
-        inputs, labels, lengths = _data
+        inputs, _, speakers, lengths = _data
 
         optimizer.zero_grad()
 
-        outputs = model(inputs.cuda(), lengths)
-        loss = criterion(outputs, labels.cuda())
+        outputs, x_vector = model(inputs.cuda(), lengths)
+        loss = criterion(outputs, x_vector, speakers.cuda())
         loss.backward()
 
         optimizer.step()
         scheduler.step()
         iter_meter.step()
 
-        labels=labels.unsqueeze(dim=-1)
+        speakers=speakers.unsqueeze(dim=-1)
         outputs=outputs.to('cpu').detach().numpy().copy()
-        labels=labels.to('cpu').detach().numpy().copy().astype(float)
+        speakers=speakers.to('cpu').detach().numpy().copy().astype(float)
         if preds is None:
             preds=outputs
-            corrs=labels
+            corrs=speakers
         else:
             preds = np.vstack((preds, outputs))
-            corrs = np.vstack((corrs, labels))
+            corrs = np.vstack((corrs, speakers))
 
         if batch_idx > 0 and (batch_idx % 100 == 0 or batch_idx == data_len) :
             print('Train Epcoh: {} [{}/{} ({:.0f}%)]\t Loss: {:.9f}'.format(
@@ -81,19 +81,19 @@ def evaluate(model, loader):
 
     with torch.no_grad():
         for i, _data in enumerate(loader):
-            inputs, labels, lengths = _data
+            inputs, _, speakers, lengths = _data
 
             outputs = model(inputs.cuda(), lengths)
-            labels=labels.unsqueeze(dim=-1)
+            speakers = speakers.unsqueeze(dim=-1)
 
             outputs=outputs.to('cpu').detach().numpy().copy()
-            labels=labels.to('cpu').detach().numpy().copy().astype(float)
+            speakers=speakers.to('cpu').detach().numpy().copy().astype(float)
             if preds is None:
                 preds=outputs
-                corrs=labels
+                corrs=speakers
             else:
                 preds = np.vstack((preds, outputs))
-                corrs = np.vstack((corrs, labels))
+                corrs = np.vstack((corrs, speakers))
                 
     preds = np.argmax(preds, axis=1)
     return preds, corrs
@@ -109,13 +109,22 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, required=True, help='data(.h5)')
-    parser.add_argument('--train', type=str, required=True, help='training keys')
-    parser.add_argument('--valid', type=str, required=True, help='validation keys')
-    parser.add_argument('--out-stats', type=str, default='stats.h5', help='mean/std values for norm')
-    parser.add_argument('--batch-size', default=64, type=int, help='mini-batch size')
-    parser.add_argument('--epochs', default=10, type=int, help='training epochs')
-    parser.add_argument('--output', type=str, default='model', help='output model')
-    parser.add_argument('--learning-rate', type=float, default=1.0e-4, help='initial learning rate')
+    parser.add_argument('--train', type=str, required=True,
+                        help='training keys')
+    parser.add_argument('--valid', type=str, required=True,
+                        help='validation keys')
+    parser.add_argument('--out-stats', type=str, default='stats.h5',
+                        help='mean/std values for norm')
+    parser.add_argument('--out-speakers', type=str, default='speakers.txt',
+                        help='speakers id')
+    parser.add_argument('--batch-size', default=64, type=int,
+                        help='mini-batch size')
+    parser.add_argument('--epochs', default=10, type=int,
+                        help='training epochs')
+    parser.add_argument('--output', type=str, default='model',
+                        help='output model')
+    parser.add_argument('--learning-rate', type=float, default=1.0e-4,
+                        help='initial learning rate')
     args = parser.parse_args()
 
     use_cuda = torch.cuda.is_available()
@@ -135,13 +144,14 @@ def main():
                                   collate_fn=lambda x: generator.data_processing(x,'train'),
                                   **kwargs)
 
-    valid_dataset=SpeechDataset(path=args.data, keypath=args.valid, stats=[mean, std], train=False)
+    valid_dataset=SpeechDataset(path=args.data, keypath=args.valid,
+                                stats=[mean, std], train=False)
     valid_loader=data.DataLoader(dataset=valid_dataset,
-                                batch_size=args.batch_size,
-                                shuffle=False,
-                                collate_fn=lambda x: generator.data_processing(x, 'valid'))
+                                 batch_size=args.batch_size,
+                                 shuffle=False,
+                                 collate_fn=lambda x: generator.data_processing(x, 'valid'))
 
-    model=ASRModel()
+    model=X_vector()
 
     print(f'The model has {count_parameters(model):,} trainable parameters')
 
@@ -157,7 +167,7 @@ def main():
                                               steps_per_epoch=int(len(train_loader)),
                                               epochs=args.epochs,
                                               anneal_strategy='linear')
-    criterion=nn.CrossEntropyLoss()
+    criterion=SpeakerLoss()
     iter_meter=IterMeter()
 
     max_acc=0.
