@@ -12,7 +12,7 @@ def read_speakers(file):
         for line in lines:
             spk = line.strip().split()[0]
             id = int(line.strip().split()[1])
-            self.id2spk[id] = spk
+            id2spk[id] = spk
     return id2spk
 
 def read_stats(file):
