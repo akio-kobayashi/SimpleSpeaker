@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.utils.data as data
 import torch.optim as optim
 import torch.nn.functional as F
-#from torch.utils.tensorboard import SummaryWriter
 from model import X_vector
 from generator import SpeechDataset
 import generator
@@ -13,24 +12,26 @@ import argparse
 from sklearn.metrics import accuracy_score
 from adacos import AdaCos 
 
+'''
 class SpeakerLoss(nn.Module):
     def __init__(self, num_features, num_class):
         super(SpeakerLoss, self).__init__()
 
-        self.ada=AdaCos(num_features, num_class).cuda()
+        #self.ada=AdaCos(num_features, num_class).cuda()
         self.ce=nn.CrossEntropyLoss().cuda()
         
-    def forward(self, x_vec, y_true):
+    def forward(self, outputs, y_true):
         if y_true is not None:
-            outputs, logits = self.ada(x_vec, y_true)
+            #outputs, logits = self.ada(x_vec, y_true)
             outputs = self.ce(outputs, y_true)
 
-            return outputs, logits
+            return outputs
         else:
             logits = self.ada(x_vec)
 
             return logits
-        
+'''
+
 class IterMeter(object):
     """keeps track of total iterations"""
     def __init__(self):
@@ -42,8 +43,8 @@ class IterMeter(object):
     def get(self):
         return self.val
 
-def train(model, loader, optimizer, scheduler,
-          criterion, epoch, iter_meter):
+def train(model, loader, optimizer, scheduler,criterion,
+          epoch, iter_meter):
     model.train()
 
     data_len=len(loader)
@@ -56,8 +57,9 @@ def train(model, loader, optimizer, scheduler,
 
         optimizer.zero_grad()
 
-        x_vector = model(inputs.cuda(), lengths)
-        loss, outputs = criterion(x_vector, speakers.cuda())
+        outputs, logits = model(inputs.cuda(), speakers.cuda(), lengths)
+        loss = criterion(outputs, speakers.cuda())
+        #loss, outputs = criterion(x_vector, speakers.cuda())
         loss.backward()
 
         optimizer.step()
@@ -65,13 +67,13 @@ def train(model, loader, optimizer, scheduler,
         iter_meter.step()
 
         speakers=speakers.unsqueeze(dim=-1)
-        outputs=outputs.to('cpu').detach().numpy().copy()
+        logits=logits.to('cpu').detach().numpy().copy()
         speakers=speakers.to('cpu').detach().numpy().copy().astype(float)
         if preds is None:
-            preds=outputs
+            preds=logits
             corrs=speakers
         else:
-            preds = np.vstack((preds, outputs))
+            preds = np.vstack((preds, logits))
             corrs = np.vstack((corrs, speakers))
 
         if batch_idx > 0 and (batch_idx % 100 == 0 or batch_idx == data_len) :
@@ -91,7 +93,7 @@ def train(model, loader, optimizer, scheduler,
     preds = np.argmax(preds, axis=1)
     return epoch_loss, preds, corrs
 
-def evaluate(model, loader, criterion):
+def evaluate(model, loader):
 
     model.eval()
     data_len = len(loader)
@@ -102,17 +104,17 @@ def evaluate(model, loader, criterion):
         for i, _data in enumerate(loader):
             inputs, speakers, lengths = _data
 
-            x_vector = model(inputs.cuda(), lengths)
-            outputs = criterion(x_vector)
+            outputs, logits = model(inputs.cuda(), speakers=None, lengths=lengths)
+            #outputs = criterion(x_vector)
             speakers = speakers.unsqueeze(dim=-1)
 
-            outputs=outputs.to('cpu').detach().numpy().copy()
+            logits=logits.to('cpu').detach().numpy().copy()
             speakers=speakers.to('cpu').detach().numpy().copy().astype(float)
             if preds is None:
-                preds=outputs
+                preds=logits
                 corrs=speakers
             else:
-                preds = np.vstack((preds, outputs))
+                preds = np.vstack((preds, logits))
                 corrs = np.vstack((corrs, speakers))
                 
     preds = np.argmax(preds, axis=1)
@@ -158,6 +160,8 @@ def main():
     train_dataset=SpeechDataset(path=args.data, keypath=args.train, train=True)
     mean, std = train_dataset.get_stats()
     s2i, i2s = train_dataset.get_speakers()
+    train_dataset.write_stats(args.out_stats)
+    train_dataset.write_speakers(args.out_speakers)
     num_speakers=len(s2i)
     
     train_loader =data.DataLoader(dataset=train_dataset,
@@ -189,13 +193,13 @@ def main():
                                               steps_per_epoch=int(len(train_loader)),
                                               epochs=args.epochs,
                                               anneal_strategy='linear')
-    criterion=SpeakerLoss(512, num_speakers)
+    criterion=nn.CrossEntropyLoss().cuda()
     iter_meter=IterMeter()
 
     max_acc=0.
     for epoch in range(1, args.epochs+1):
         loss, preds, corrs = train(model, train_loader,
-                                   optimizer, scheduler, criterion,
+                                   optimizer, scheduler,criterion,
                                    epoch, iter_meter)
         acc = accuracy_score(corrs, preds)
         print('Train Acc: %.3f' % acc)
@@ -208,7 +212,8 @@ def main():
         if acc > max_acc:
             print('Maximum Acc changed... %.3f -> %.3f' % (max_acc , acc))
             max_acc = acc
-            torch.save(model.to('cpu').state_dict(), args.output)
+            #torch.save(model.to('cpu').state_dict(), args.output)
+            torch.save(model.to('cpu'), args.output)
             model.to(device)
             
     print('Maximum Acc: %.3f' % max_acc)

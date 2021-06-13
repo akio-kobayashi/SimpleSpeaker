@@ -73,9 +73,9 @@ class SpeechDataset(torch.utils.data.Dataset):
 
     def write_stats(self, file):
         with h5py.File(file, 'w') as f:
-            f.create_dataset(key+'/mean',  data=self.mean,
+            f.create_dataset('mean',  data=self.mean,
                              compression='gzip', compression_opts=9)
-            f.create_dataset(key+'/std',  data=self.std,
+            f.create_dataset('std',  data=self.std,
                              compression='gzip', compression_opts=9)
             
     def get_stats(self):
@@ -83,7 +83,12 @@ class SpeechDataset(torch.utils.data.Dataset):
 
     def get_speakers(self):
         return self.spk2id, self.id2spk
-    
+
+    def write_speakers(self, file):
+        with open(file, 'w') as f:
+            for spk in self.spk2id:
+                f.write("%s %d\n" % (spk, self.spk2id[spk]))
+                
     def get_keys(self):
         return self.keys
 

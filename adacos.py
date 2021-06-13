@@ -22,7 +22,7 @@ class AdaCos(nn.Module):
         # dot product
         logits = F.linear(x, W)
         if label is None:
-            return logits
+            return None, logits
         # feature re-scale
         theta = torch.acos(torch.clamp(logits, -1.0 + 1e-7, 1.0 - 1e-7))
         one_hot = torch.zeros_like(logits)
@@ -56,7 +56,7 @@ class ArcFace(nn.Module):
         # dot product
         logits = F.linear(x, W)
         if label is None:
-            return logits
+            return None, logits
         # add margin
         theta = torch.acos(torch.clamp(logits, -1.0 + 1e-7, 1.0 - 1e-7))
         target_logits = torch.cos(theta + self.m)
@@ -66,7 +66,7 @@ class ArcFace(nn.Module):
         # feature re-scale
         output *= self.s
 
-        return output
+        return output, logits
 
 class SphereFace(nn.Module):
     def __init__(self, num_features, num_classes, s=30.0, m=1.35):
