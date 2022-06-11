@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: cvqluu
-repo: https://github.com/cvqluu/TDNN
+TDNN from https://github.com/cvqluu/TDNN
 """
 
 import torch.nn as nn

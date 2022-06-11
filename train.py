@@ -12,26 +12,6 @@ import argparse
 from sklearn.metrics import accuracy_score
 from adacos import AdaCos 
 
-'''
-class SpeakerLoss(nn.Module):
-    def __init__(self, num_features, num_class):
-        super(SpeakerLoss, self).__init__()
-
-        #self.ada=AdaCos(num_features, num_class).cuda()
-        self.ce=nn.CrossEntropyLoss().cuda()
-        
-    def forward(self, outputs, y_true):
-        if y_true is not None:
-            #outputs, logits = self.ada(x_vec, y_true)
-            outputs = self.ce(outputs, y_true)
-
-            return outputs
-        else:
-            logits = self.ada(x_vec)
-
-            return logits
-'''
-
 class IterMeter(object):
     """keeps track of total iterations"""
     def __init__(self):
